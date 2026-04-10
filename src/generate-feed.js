@@ -33,8 +33,18 @@ query {
   }
 }`;
 
+const LOCATIONS_QUERY = `
+query {
+  locations(first: 20) {
+    nodes {
+      id
+      name
+    }
+  }
+}`;
+
 const PRODUCTS_QUERY = `
-query ($cursor: String, $publicationId: ID!) {
+query ($cursor: String, $publicationId: ID!, $locationId: ID!) {
   products(first: 50, after: $cursor, query: "status:active") {
     pageInfo {
       hasNextPage
@@ -58,7 +68,43 @@ query ($cursor: String, $publicationId: ID!) {
           compareAtPrice
           inventoryQuantity
           inventoryPolicy
+          selectedOptions { name value }
+          inventoryItem {
+            inventoryLevel(locationId: $locationId) {
+              quantities(names: ["available"]) {
+                quantity
+              }
+            }
+          }
           image { url }
+        }
+      }
+    }
+  }
+}`;
+
+const BUNDLE_QUERY = `
+query ($productId: ID!, $locationId: ID!) {
+  product(id: $productId) {
+    bundleComponents(first: 20) {
+      nodes {
+        quantity
+        optionSelections {
+          parentOption { name }
+          componentOption { name }
+          values { value }
+        }
+        componentVariants(first: 20) {
+          nodes {
+            selectedOptions { name value }
+            inventoryItem {
+              inventoryLevel(locationId: $locationId) {
+                quantities(names: ["available"]) {
+                  quantity
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -100,14 +146,28 @@ async function getOnlineStorePublicationId() {
   return pub.id;
 }
 
+async function getWarehouseLocationId() {
+  const data = await graphql(LOCATIONS_QUERY);
+  const loc = data.locations.nodes.find((l) => l.name === 'Monarch Warehouse US');
+  if (!loc) {
+    throw new Error(
+      'Monarch Warehouse US location not found. Available: ' +
+        data.locations.nodes.map((l) => l.name).join(', '),
+    );
+  }
+  console.log(`Warehouse location: ${loc.id}`);
+  return loc.id;
+}
+
 async function fetchAllProducts() {
   const publicationId = await getOnlineStorePublicationId();
+  const locationId = await getWarehouseLocationId();
   const products = [];
   let cursor = null;
   let hasNextPage = true;
 
   while (hasNextPage) {
-    const data = await graphql(PRODUCTS_QUERY, { cursor, publicationId });
+    const data = await graphql(PRODUCTS_QUERY, { cursor, publicationId, locationId });
     for (const product of data.products.nodes) {
       if (product.publishedOnPublication) {
         products.push(product);
@@ -115,6 +175,18 @@ async function fetchAllProducts() {
     }
     hasNextPage = data.products.pageInfo.hasNextPage;
     cursor = data.products.pageInfo.endCursor;
+  }
+
+  // Fetch bundle components for products with no location-level inventory
+  for (const product of products) {
+    const isBundle = product.variants.nodes.every(
+      (v) => getLocationQty(v.inventoryItem) == null,
+    );
+    if (!isBundle) continue;
+
+    const data = await graphql(BUNDLE_QUERY, { productId: product.id, locationId });
+    product.bundleComponents = data.product.bundleComponents;
+    console.log(`  ↳ Resolved bundle components: "${product.title}"`);
   }
 
   return products;
@@ -131,6 +203,60 @@ function csvEscape(val) {
   if (val == null) return '';
   const s = String(val);
   return /[,"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// ── Bundle inventory ────────────────────────────────────────────────────────
+
+function getLocationQty(inventoryItem) {
+  return inventoryItem?.inventoryLevel?.quantities?.[0]?.quantity;
+}
+
+/**
+ * For a bundle variant, calculate availability from component inventory
+ * at the target location. Returns null for non-bundle products.
+ */
+function getBundleLocationQty(product, variant) {
+  const components = product.bundleComponents?.nodes;
+  if (!components?.length) return null;
+
+  const parentOpts = variant.selectedOptions;
+  let minQty = Infinity;
+
+  for (const comp of components) {
+    const { optionSelections, componentVariants, quantity: needed } = comp;
+
+    let matched = null;
+
+    // Only consider selections that map a parent option to a component option
+    const mapped = (optionSelections || []).filter((s) => s.parentOption);
+
+    if (!mapped.length) {
+      // Fixed component (e.g. Spray Bottle) → use first variant
+      matched = componentVariants.nodes[0];
+    } else {
+      // Match parent option values to component option values
+      for (const cv of componentVariants.nodes) {
+        const allMatch = mapped.every((sel) => {
+          const parentVal = parentOpts.find(
+            (o) => o.name === sel.parentOption.name,
+          )?.value;
+          const compVal = cv.selectedOptions.find(
+            (o) => o.name === sel.componentOption.name,
+          )?.value;
+          return parentVal === compVal;
+        });
+        if (allMatch) { matched = cv; break; }
+      }
+    }
+
+    if (!matched) return 0; // can't resolve → treat as OOS
+
+    const compQty = getLocationQty(matched.inventoryItem) ?? 0;
+    const available = Math.floor(compQty / (needed || 1));
+    minQty = Math.min(minQty, available);
+  }
+
+  return minQty === Infinity ? null : minQty;
 }
 
 // ── Feed generation ─────────────────────────────────────────────────────────
@@ -178,9 +304,11 @@ function buildFeedRows(products) {
         : `${price.toFixed(2)} USD`;
       const metaSalePrice = onSale ? `${price.toFixed(2)} USD` : '';
 
-      // In stock if qty > 0 OR inventory policy allows continued selling
-      const inStock =
-        variant.inventoryQuantity > 0 || variant.inventoryPolicy === 'CONTINUE';
+      // Location inventory: direct for regular products, component-based for bundles
+      const locationQty = getLocationQty(variant.inventoryItem);
+      const bundleQty = getBundleLocationQty(product, variant);
+      const qty = locationQty != null ? locationQty : bundleQty ?? variant.inventoryQuantity;
+      const inStock = qty > 0 || variant.inventoryPolicy === 'CONTINUE';
 
       // Append variant title only when it differs from "Default Title"
       const title =
