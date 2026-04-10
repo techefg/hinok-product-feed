@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Redirecting to checkout…</title></head>
+<body>
+<script>
+// Parse Meta's ?products=VARIANT_ID:QTY,VARIANT_ID:QTY format
+// and redirect to Shopify's /cart/VARIANT_ID:QTY,VARIANT_ID:QTY format
+const params = new URLSearchParams(window.location.search);
+const products = params.get('products');
+if (products) {
+  window.location.replace('https://hinok.us/cart/' + products);
+} else {
+  window.location.replace('https://hinok.us');
+}
+</script>
+<noscript><a href="https://hinok.us">Continue to checkout</a></noscript>
+</body>
+</html>
