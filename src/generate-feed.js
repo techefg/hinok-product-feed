@@ -23,14 +23,26 @@ const GRAPHQL_URL = `https://${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/graph
 
 // ── Shopify GraphQL ─────────────────────────────────────────────────────────
 
+const PUBLICATIONS_QUERY = `
+query {
+  publications(first: 20) {
+    nodes {
+      id
+      name
+    }
+  }
+}`;
+
 const PRODUCTS_QUERY = `
-query ($cursor: String) {
+query ($cursor: String, $publicationId: ID!) {
   products(first: 50, after: $cursor, query: "status:active") {
     pageInfo {
       hasNextPage
       endCursor
     }
     nodes {
+      id
+      publishedOnPublication(publicationId: $publicationId)
       title
       description
       handle
@@ -75,14 +87,32 @@ async function graphql(query, variables = {}) {
   return data;
 }
 
+async function getOnlineStorePublicationId() {
+  const data = await graphql(PUBLICATIONS_QUERY);
+  const pub = data.publications.nodes.find((p) => p.name === 'Online Store');
+  if (!pub) {
+    throw new Error(
+      'Online Store publication not found. Available: ' +
+        data.publications.nodes.map((p) => p.name).join(', '),
+    );
+  }
+  console.log(`Online Store publication: ${pub.id}`);
+  return pub.id;
+}
+
 async function fetchAllProducts() {
+  const publicationId = await getOnlineStorePublicationId();
   const products = [];
   let cursor = null;
   let hasNextPage = true;
 
   while (hasNextPage) {
-    const data = await graphql(PRODUCTS_QUERY, { cursor });
-    products.push(...data.products.nodes);
+    const data = await graphql(PRODUCTS_QUERY, { cursor, publicationId });
+    for (const product of data.products.nodes) {
+      if (product.publishedOnPublication) {
+        products.push(product);
+      }
+    }
     hasNextPage = data.products.pageInfo.hasNextPage;
     cursor = data.products.pageInfo.endCursor;
   }
@@ -107,6 +137,7 @@ function csvEscape(val) {
 
 const HEADERS = [
   'id',
+  'item_group_id',
   'title',
   'description',
   'availability',
@@ -118,6 +149,7 @@ const HEADERS = [
   'additional_image_link',
   'brand',
   'product_type',
+  'google_product_category',
 ];
 
 function buildFeedRows(products) {
@@ -128,6 +160,7 @@ function buildFeedRows(products) {
     const mainImage = images[0] || '';
     const additionalImages = images.slice(1).join(',');
     const baseLink = `${STORE_DOMAIN}/products/${product.handle}`;
+    const groupId = numericId(product.id);
 
     for (const variant of product.variants.nodes) {
       const id = numericId(variant.id);
@@ -160,6 +193,7 @@ function buildFeedRows(products) {
 
       rows.push([
         id,
+        groupId,
         title,
         product.description || product.title,
         inStock ? 'in stock' : 'out of stock',
@@ -171,6 +205,7 @@ function buildFeedRows(products) {
         additionalImages,
         BRAND,
         product.productType || '',
+        'Health & Beauty > Personal Care > Cosmetics > Skin Care',
       ]);
     }
   }
