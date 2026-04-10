@@ -1,0 +1,47 @@
+name: Generate Meta Product Feed
+
+on:
+  schedule:
+    # UTC 06:00 = KST 15:00 — daily
+    - cron: '0 6 * * *'
+  workflow_dispatch: # manual trigger
+
+jobs:
+  generate-feed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Generate feed CSV
+        env:
+          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
+          STORE_DOMAIN: ${{ vars.STORE_DOMAIN || 'https://hinok.com' }}
+          BRAND: ${{ vars.BRAND || 'Hinok' }}
+        run: node src/generate-feed.js
+
+      - name: Commit and push feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/feed.csv
+          git diff --staged --quiet || git commit -m "chore: update Meta product feed [skip ci]"
+          git push
+
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"⚠️ Meta product feed generation failed\\nRepo: ${{ github.repository }}\\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK_URL"
