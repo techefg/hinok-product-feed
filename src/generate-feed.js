@@ -7,7 +7,7 @@ import { join } from 'node:path';
 const {
   SHOPIFY_STORE_URL,
   SHOPIFY_ACCESS_TOKEN,
-  STORE_DOMAIN = 'https://hinok.com',
+  STORE_DOMAIN = 'https://hinok.us',
   BRAND = 'Hinok',
 } = process.env;
 

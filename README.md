@@ -30,7 +30,7 @@ GitHub repo → Settings → Secrets and variables → Actions → **New reposit
 
 | Variable | 기본값 | 설명 |
 |----------|--------|------|
-| `STORE_DOMAIN` | `https://hinok.com` | 커스텀 도메인 |
+| `STORE_DOMAIN` | `https://hinok.us` | 커스텀 도메인 |
 | `BRAND` | `Hinok` | 피드 brand 필드 |
 
 ### 3. Shopify Admin API 토큰 생성
@@ -78,7 +78,7 @@ npm run generate
 | `condition` | `new` (고정) |
 | `price` | 정가 (compare_at_price 또는 price) — `"49.00 USD"` |
 | `sale_price` | 할인가 (compare_at_price가 있을 때만) |
-| `link` | `https://hinok.com/products/{handle}?variant={id}` |
+| `link` | `https://hinok.us/products/{handle}?variant={id}` |
 | `image_link` | 배리언트 이미지 또는 메인 이미지 |
 | `additional_image_link` | 추가 제품 이미지 |
 | `brand` | `Hinok` |
