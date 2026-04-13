@@ -310,6 +310,37 @@ function buildFeedRows(products) {
       const qty = locationQty != null ? locationQty : bundleQty ?? variant.inventoryQuantity;
       const inStock = qty > 0 || variant.inventoryPolicy === 'CONTINUE';
 
+      // Debug: dump bundle/set resolution to help diagnose stock mismatches
+      if (/set|bundle|kit/i.test(product.title)) {
+        const source =
+          locationQty != null ? 'locationQty'
+          : bundleQty != null ? 'bundleQty'
+          : 'variant.inventoryQuantity (cross-location fallback)';
+        console.log(
+          `  [stock] "${product.title}" / "${variant.title}" → ` +
+          `locationQty=${locationQty}, bundleQty=${bundleQty}, ` +
+          `inventoryQuantity=${variant.inventoryQuantity}, ` +
+          `policy=${variant.inventoryPolicy}, picked=${qty} (${source}), ` +
+          `inStock=${inStock}`,
+        );
+        if (product.bundleComponents?.nodes?.length) {
+          for (const comp of product.bundleComponents.nodes) {
+            const mapped = (comp.optionSelections || []).filter((s) => s.parentOption);
+            console.log(
+              `    ↳ component need=${comp.quantity}, mappedOpts=${JSON.stringify(mapped)}, ` +
+              `compVariants=${JSON.stringify(
+                comp.componentVariants.nodes.map((cv) => ({
+                  opts: cv.selectedOptions,
+                  qty: getLocationQty(cv.inventoryItem),
+                })),
+              )}`,
+            );
+          }
+        } else {
+          console.log(`    ↳ bundleComponents NOT fetched (isBundle check failed)`);
+        }
+      }
+
       // Append variant title only when it differs from "Default Title"
       const title =
         variant.title && variant.title !== 'Default Title'
