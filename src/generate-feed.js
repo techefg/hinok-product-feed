@@ -267,6 +267,8 @@ const HEADERS = [
   'title',
   'description',
   'availability',
+  'quantity_to_sell_on_facebook',
+  'inventory',
   'condition',
   'price',
   'sale_price',
@@ -310,6 +312,12 @@ function buildFeedRows(products) {
       const qty = locationQty != null ? locationQty : bundleQty ?? variant.inventoryQuantity;
       const inStock = qty > 0 || variant.inventoryPolicy === 'CONTINUE';
 
+      // Meta needs explicit quantity fields to override its default OOS marking.
+      // Without these, Meta was inferring quantity=0 from missing data even when
+      // CSV said "in stock" — verified 2026-05-15 (5 SKUs incl. The Hand Wash
+      // showed in_stock=0 in catalog while Shopify had 50-113 inventory).
+      const metaQty = inStock ? Math.max(qty ?? 0, 1) : 0;
+
       // Append variant title only when it differs from "Default Title"
       const title =
         variant.title && variant.title !== 'Default Title'
@@ -325,6 +333,8 @@ function buildFeedRows(products) {
         title,
         product.description || product.title,
         inStock ? 'in stock' : 'out of stock',
+        metaQty,
+        metaQty,
         'new',
         metaPrice,
         metaSalePrice,
