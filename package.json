@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "generate": "node src/generate-feed.js",
-    "generate:dry": "node src/generate-feed.js --dry-run"
+    "generate:dry": "node src/generate-feed.js --dry-run",
+    "google:merchant": "node src/google-merchant.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

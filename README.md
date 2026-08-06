@@ -81,6 +81,18 @@ Google 피드는 `docs/google-feed.csv`에 생성됩니다. Shopify Online Store
 3. 기존 Google & YouTube 앱 데이터 소스는 새 소스의 상품 승인·가격 검증 후 제거
 4. 상품 ID는 Shopify variant ID 숫자값을 사용하므로 구형 앱 offer와 충돌하지 않음
 
+Merchant API 관리 명령:
+
+```bash
+npm run google:merchant -- auth
+npm run google:merchant -- list
+npm run google:merchant -- create          # dry-run
+npm run google:merchant -- create --apply  # 생성 + 즉시 fetch
+npm run google:merchant -- status <data-source-id>
+```
+
+OAuth 자격 증명은 gitignore된 로컬 `.env`에만 저장됩니다. 데이터 소스 삭제는 ID 조회와 표시 이름 일치가 모두 확인된 경우에만 `--apply --name`으로 실행됩니다.
+
 Google custom label 정의:
 
 | Label | 정의 | 예시 |
