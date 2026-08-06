@@ -5,7 +5,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/content';
-const OAUTH_REDIRECT_URI = 'http://127.0.0.1:8085/oauth2callback';
+// This OAuth client is already registered for the localhost callback used by
+// the existing Google Ads / GA4 authorization tooling.
+const OAUTH_REDIRECT_URI = 'http://localhost:8080/';
 const API_BASE = 'https://merchantapi.googleapis.com/datasources/v1';
 const FEED_URL = 'https://techefg.github.io/hinok-product-feed/google-feed.csv';
 const DISPLAY_NAME = 'Hinok Shopify Direct Feed';
@@ -77,7 +79,7 @@ async function authorize() {
     const server = createServer(async (req, res) => {
       try {
         const callback = new URL(req.url, OAUTH_REDIRECT_URI);
-        if (callback.pathname !== '/oauth2callback') {
+        if (callback.pathname !== '/') {
           res.writeHead(404).end('Not found');
           return;
         }
@@ -104,7 +106,7 @@ async function authorize() {
         server.close(() => reject(error));
       }
     });
-    server.listen(8085, '127.0.0.1');
+    server.listen(8080, 'localhost');
   });
 }
 
