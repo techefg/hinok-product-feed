@@ -1,6 +1,6 @@
-# Hinok US — Meta Product Feed Pipeline
+# Hinok US — Direct Product Feed Pipeline
 
-Shopify 번들 제품(The Spray Set 등)을 포함한 전체 카탈로그를 Meta Commerce Manager 피드 스펙에 맞는 CSV로 생성하여 GitHub Pages로 호스팅합니다.
+Shopify 번들 제품(The Spray Set 등)을 포함한 판매 가능 카탈로그를 Meta Commerce Manager와 Google Merchant Center용 CSV로 각각 생성하여 GitHub Pages로 호스팅합니다.
 
 ## 왜 필요한가?
 
@@ -9,8 +9,9 @@ Shopify 내장 Bundles 앱으로 만든 번들 제품은 `bundleComponents` 속�
 ## 구조
 
 ```
-src/generate-feed.js          # Shopify GraphQL → Meta CSV 변환 스크립트
+src/generate-feed.js          # Shopify GraphQL → Meta / Google CSV 변환 스크립트
 docs/feed.csv                  # 생성된 피드 파일 (GitHub Pages로 서빙)
+docs/google-feed.csv           # Google Merchant Center primary feed
 .github/workflows/meta-feed.yml  # 매일 자동 실행 워크플로우
 ```
 
@@ -46,7 +47,10 @@ GitHub repo → Settings → Secrets and variables → Actions → **New reposit
 3. Branch: `main`, Folder: `/docs`
 4. Save
 
-피드 URL: `https://<owner>.github.io/hinok-product-feed/feed.csv`
+피드 URL:
+
+- Meta: `https://<owner>.github.io/hinok-product-feed/feed.csv`
+- Google: `https://<owner>.github.io/hinok-product-feed/google-feed.csv`
 
 ### 5. Meta Commerce Manager 연결
 
@@ -63,9 +67,29 @@ cp .env.example .env
 
 npm install
 npm run generate
+npm run generate:dry  # Shopify 조회 + 두 피드 검증, 파일 미작성
 ```
 
 `docs/feed.csv` 에 피드 파일이 생성됩니다.
+
+Google 피드는 `docs/google-feed.csv`에 생성됩니다. Shopify Online Store publication에 공개된 활성 상품만 포함하며, Google Shopping용 제목·카테고리·custom label을 별도로 적용합니다.
+
+### Google Merchant Center 연결
+
+1. Merchant Center → Settings → Data sources
+2. `docs/google-feed.csv`의 GitHub Pages URL을 US / English / USD의 **단일 Primary source**로 등록
+3. 기존 Google & YouTube 앱 데이터 소스는 새 소스의 상품 승인·가격 검증 후 제거
+4. 상품 ID는 Shopify variant ID 숫자값을 사용하므로 구형 앱 offer와 충돌하지 않음
+
+Google custom label 정의:
+
+| Label | 정의 | 예시 |
+|---|---|---|
+| `custom_label_0` | 제품군 | `spray`, `hair_care`, `body_care` |
+| `custom_label_1` | 제품 역할 | `starter_set`, `gift_set`, `refill` |
+| `custom_label_2` | 가격대 | `aov_50_plus`, `aov_30_49` |
+| `custom_label_3` | Shopping 입찰 우선순위 | `high`, `medium`, `low` |
+| `custom_label_4` | 재고 상태 | `in_stock`, `continue_selling`, `out_of_stock` |
 
 ## 피드 필드 매핑
 

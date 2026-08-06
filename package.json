@@ -1,10 +1,11 @@
 {
   "name": "hinok-product-feed",
   "version": "1.0.0",
-  "description": "Meta Commerce Manager product feed generator for Hinok US Shopify store",
+  "description": "Direct Meta and Google product feed generator for Hinok US Shopify store",
   "type": "module",
   "scripts": {
-    "generate": "node src/generate-feed.js"
+    "generate": "node src/generate-feed.js",
+    "generate:dry": "node src/generate-feed.js --dry-run"
   },
   "dependencies": {
     "dotenv": "^16.4.7"
