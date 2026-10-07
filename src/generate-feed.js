@@ -170,7 +170,10 @@ async function fetchAllProducts() {
   while (hasNextPage) {
     const data = await graphql(PRODUCTS_QUERY, { cursor, publicationId, locationId });
     for (const product of data.products.nodes) {
-      if (product.publishedOnPublication) {
+      if (
+        product.publishedOnPublication &&
+        product.productType.trim().toLowerCase() !== 'complimentary gift'
+      ) {
         products.push(product);
       }
     }
