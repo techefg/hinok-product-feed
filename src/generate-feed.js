@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { getGoogleCopy, structuredCopy, googleText } from './google-copy.js';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -10,13 +12,6 @@ const {
   STORE_DOMAIN = 'https://hinok.us',
   BRAND = 'Hinok',
 } = process.env;
-
-if (!SHOPIFY_STORE_URL || !SHOPIFY_ACCESS_TOKEN) {
-  console.error(
-    'ERROR: Missing required env vars — SHOPIFY_STORE_URL, SHOPIFY_ACCESS_TOKEN',
-  );
-  process.exit(1);
-}
 
 const API_VERSION = '2025-01';
 const GRAPHQL_URL = `https://${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/graphql.json`;
@@ -379,6 +374,8 @@ const GOOGLE_HEADERS = [
   'custom_label_2',
   'custom_label_3',
   'custom_label_4',
+  'structured_title',
+  'structured_description',
 ];
 
 function productKey(product) {
@@ -434,7 +431,10 @@ function extractSize(product, variant) {
 function googleTitle(product, variant) {
   const key = productKey(product);
   let title;
-  if (key.includes('spray gift set')) {
+  if (key.includes('spray') && key.includes('hand wash') && key.includes('set')) {
+    // Future variants must also retain the set identity before single-item rules.
+    title = `${BRAND} ${product.title.replace(/^The\s+/i, '')}`;
+  } else if (key.includes('spray gift set')) {
     title = 'Hinok Fabric Refresher Gift Set – Jeju Hinoki Cypress';
   } else if (key.includes('spray refill')) {
     title = 'Hinok Fabric Refresher Refill – Jeju Hinoki Cypress';
@@ -513,11 +513,12 @@ function buildGoogleFeedRows(products) {
         ? 'continue_selling'
         : inStock ? 'in_stock' : 'out_of_stock';
 
+      const copy = getGoogleCopy(id, product.handle);
       rows.push([
         id,
         groupId,
-        googleTitle(product, variant),
-        product.description || product.title,
+        copy.title ? '' : googleTitle(product, variant),
+        copy.description ? '' : product.description || product.title,
         inStock ? 'in_stock' : 'out_of_stock',
         'new',
         `${(onSale ? compareAt : price).toFixed(2)} USD`,
@@ -535,6 +536,8 @@ function buildGoogleFeedRows(products) {
         price >= 50 ? 'aov_50_plus' : price >= 30 ? 'aov_30_49' : 'aov_under_30',
         googlePriority(product, variant),
         availabilityLabel,
+        structuredCopy(copy.title),
+        structuredCopy(copy.description),
       ]);
     }
   }
@@ -544,7 +547,7 @@ function buildGoogleFeedRows(products) {
 
 function validateGoogleFeedRows(rows) {
   const seen = new Set();
-  const required = ['id', 'title', 'description', 'availability', 'price', 'link', 'image_link'];
+  const required = ['id', 'availability', 'price', 'link', 'image_link'];
   const errors = [];
 
   rows.forEach((row, index) => {
@@ -554,7 +557,16 @@ function validateGoogleFeedRows(rows) {
     }
     if (seen.has(record.id)) errors.push(`row ${index + 2}: duplicate id ${record.id}`);
     seen.add(record.id);
-    if (record.title.length > 150) errors.push(`row ${index + 2}: title exceeds 150 chars`);
+    if (row.length !== GOOGLE_HEADERS.length) errors.push(`row ${index + 2}: wrong column count`);
+    for (const [field, limit] of [['title', 150], ['description', 5000]]) {
+      try {
+        if (googleText(record, field).length > limit) {
+          errors.push(`row ${index + 2}: ${field} exceeds ${limit} chars`);
+        }
+      } catch (error) {
+        errors.push(`row ${index + 2}: ${error.message}`);
+      }
+    }
     if (!/^https:\/\//.test(record.link)) errors.push(`row ${index + 2}: invalid link`);
     if (!/^https:\/\//.test(record.image_link)) errors.push(`row ${index + 2}: invalid image_link`);
     if (!/^[0-9]+(?:\.[0-9]{2}) USD$/.test(record.price)) {
@@ -570,6 +582,9 @@ function validateGoogleFeedRows(rows) {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!SHOPIFY_STORE_URL || !SHOPIFY_ACCESS_TOKEN) {
+    throw new Error('Missing required env vars: SHOPIFY_STORE_URL, SHOPIFY_ACCESS_TOKEN');
+  }
   const dryRun = process.argv.includes('--dry-run');
   console.log('Fetching products from Shopify…');
   const products = await fetchAllProducts();
@@ -616,7 +631,14 @@ async function main() {
   console.log(`Written → ${googlePath}`);
 }
 
-main().catch((err) => {
-  console.error('Feed generation failed:', err.message);
-  process.exit(1);
-});
+export {
+  fetchAllProducts, buildMetaFeedRows, buildGoogleFeedRows, validateGoogleFeedRows,
+  META_HEADERS, GOOGLE_HEADERS, csvEscape,
+};
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error('Feed generation failed:', err.message);
+    process.exit(1);
+  });
+}

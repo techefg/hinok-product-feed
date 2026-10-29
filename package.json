@@ -6,7 +6,8 @@
   "scripts": {
     "generate": "node src/generate-feed.js",
     "generate:dry": "node src/generate-feed.js --dry-run",
-    "google:merchant": "node src/google-merchant.js"
+    "google:merchant": "node src/google-merchant.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7"
